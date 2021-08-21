@@ -1,0 +1,71 @@
+---
+title: "Case Study: How Can a Wellness Technology Company Play It Smart?"
+author: "Sarah Thiesen"
+date: "20 8 2021"
+output: html_document
+---
+
+## Business Task
+
+Identify trends in the usage of fitness trackers, and use these insights to help ajust the BellaBeat marketing strategy for their BellaBeat Leaf.
+
+## Data Sources
+
+The data is from the [FitBit Fitness Tracker Data](https://www.kaggle.com/arashnic/fitbit) on Kaggle. This collection of datasets includes personal tracker data from thirty FitBit users, including minute-level output for physical activity, heart rate, and sleep monitoring. The data was recorded in December 2016.
+
+Limitations:
+- Data is not recent (collected in 2016)  
+- Sample is relatively small (30 respondents)  
+- Demographic data of respondents is not included. This is especially problematic since BellaBeat's main customer base is female, and it is unclear how many women are included in the sample, and how they might differ from men in their FitBit usage.  
+
+## Data Cleaning and Manipulation
+
+The data contains dates and time as strings. These need to be converted into appropriate formats for analysis.
+
+```{r, message = F}
+library(dplyr)
+library(lubridate)
+
+dailyActivity <- read.csv("FitBaseData/dailyActivity_merged.csv") %>%
+  mutate(ActivityDate = as.Date(ActivityDate, "%m/%d/%Y"))
+hourlyIntensity <- read.csv("FitBaseData/hourlyIntensities_merged.csv") %>%
+  mutate(ActivityHour = strptime(ActivityHour, "%m/%d/%Y %I:%M:%S %p"))
+
+head(hourlyIntensity)
+```
+
+## Analysis
+
+```{r}
+library(ggplot2)
+
+intensity_per_hour <- mutate(hourlyIntensity, Hour = hour(ActivityHour), Id = as.factor(Id)) %>% 
+    group_by(Id, Hour) %>% 
+    summarise(AvgIntensity = mean(TotalIntensity))
+
+intensity_per_person <- group_by(hourlyIntensity, Id) %>% 
+    summarise(AvgIntensity = mean(TotalIntensity))
+
+intensity_groups <- group_by(hourlyIntensity, Id) %>% 
+    mutate(IntensityGroup = case_when(sum(TotalIntensity) > 10000 ~ "High", 
+                                      sum(TotalIntensity) > 5000 ~ "Medium", 
+                                      TRUE ~ "Low")) %>%
+    ungroup() %>%
+    group_by(IntensityGroup) %>%
+    mutate(Hour = hour(ActivityHour), group_size = length(unique(Id))) %>%
+    group_by(Hour, IntensityGroup) %>%
+    summarise(AvgIntensity = mean(TotalIntensity), group_size = unique(group_size))
+
+ggplot(intensity_groups, aes(x = Hour, y = AvgIntensity, color = IntensityGroup)) + geom_line()
+
+#ggplot(intensity_per_hour, aes(x = Hour, y = AvgIntensity)) + geom_line()
+ggplot(intensity_per_hour, aes(x = Hour, y = AvgIntensity, group = Hour)) + geom_boxplot()
+
+intensity_per_weekdayday <- mutate(hourlyIntensity, Weekday = weekdays(ActivityHour, abbreviate = TRUE)) %>% 
+  group_by(Weekday) %>% 
+  summarise(AvgIntensity = mean(TotalIntensity))
+```
+
+## Key Findings
+
+## Recommendations
