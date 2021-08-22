@@ -16,7 +16,7 @@ The data is from the [FitBit Fitness Tracker Data](https://www.kaggle.com/arashn
 Limitations:  
 <ul>
   <li>Data is not recent (collected in 2016)</li>
-  <li>Sample is relatively small (30 respondents)</li>
+  <li>Sample is relatively small (33 respondents)</li>
   <li>Demographic data of respondents is not included. This is especially problematic since BellaBeat's main customer base is female, and it is unclear how many women are included in the sample, and how they might differ from men in their FitBit usage.</li>
 </ul>
 
@@ -104,6 +104,7 @@ dailyUsage <- group_by(dailyData, Id) %>%
   summarise(Activity = sum(TotalSteps > 0, na.rm = TRUE),
             Sleep = sum(!is.na(TotalMinutesAsleep)),
             Weight = sum(!is.na(WeightKg), na.rm = TRUE),
+            SleepWeight = sum(!is.na(TotalMinutesAsleep) | !is.na(WeightKg)),
             n = n())
 
 pivot_longer(dailyUsage, cols = Activity:Weight, 
@@ -115,6 +116,31 @@ pivot_longer(dailyUsage, cols = Activity:Weight,
   xlab("Days Used") + 
   ylab("Count") +
   theme(legend.position = "none")
+```
+
+```{r}
+mutate(dailyUsage, WeightGroup = case_when(Weight > 20 ~ 3, Weight > 0 ~ 2, TRUE ~ 1) %>% 
+         ordered(levels = c(1:3), labels = c("never used", "used occasionally", "used frequently"))) %>%
+  ggplot(aes(x = Activity, y = Sleep, size = WeightGroup, color = WeightGroup)) +
+  geom_point() + 
+  scale_color_brewer(palette="RdYlGn")
+```
+
+### Grouping
+
+Group users into three groups:
+- Occasional users: use FitBit irregularly  
+- Frequent users: use FitBit frequently, but mainly use Activity tracking and don't make frequent use of sleep tracking or weight tracking  
+- Heavy users: use FitBit frequently for both activity tracking as well as sleep tracking or weight tracking
+
+```{r}
+set.seed(10)
+km <- select(dailyUsage, Activity, SleepWeight) %>% kmeans(3)
+
+dailyUsage$cluster <- factor(km$cluster, levels = c(1:3), labels = c("Occasional Users", "Frequent Users", "Heavy Users"))
+
+ggplot(dailyUsage, aes(x = Activity, y = SleepWeight, color = cluster)) +
+  geom_point()
 ```
 
 ## Key Findings
