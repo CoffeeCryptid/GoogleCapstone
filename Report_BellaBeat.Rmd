@@ -29,6 +29,7 @@ Merge datasets
 ### Data Preparation Daily Data:
 ```{r, message = F, results = "asis"}
 library(dplyr)
+library(tidyr)
 library(ggplot2)
 library(lubridate)
 library(scales)
@@ -59,7 +60,7 @@ dailyData <- left_join(dailyActivity, dailySleep, by = c("Id", "ActivityDate")) 
   select(-LogId, -IsManualReport, -WeightPounds)
 
 #Clean up
-rm(dailyActivity, dailySleep, dailyWeight)
+#rm(dailyActivity, dailySleep, dailyWeight)
 ```
 
 ### Data Preparation Hourly Data
@@ -90,6 +91,31 @@ cat(paste("Number of NA values:", sum(is.na(hourlyData))))
 ```
 
 ## Analysis
+
+### Which functions are used?
+
+Use daily data to analyze which functions are used  
+Actity data: on how many days for every respondent are steps recorded?  
+Sleep data: on how many days is sleep recorded?  
+Weight data: how many weight records exist for every person?
+
+```{r}
+dailyUsage <- group_by(dailyData, Id) %>%
+  summarise(Activity = sum(TotalSteps > 0, na.rm = TRUE),
+            Sleep = sum(!is.na(TotalMinutesAsleep)),
+            Weight = sum(!is.na(WeightKg), na.rm = TRUE),
+            n = n())
+
+pivot_longer(dailyUsage, cols = Activity:Weight, 
+             names_to = "Variable", values_to = "Value") %>%
+  ggplot(aes(x = Value, fill = Variable)) +
+  geom_histogram(binwidth = 1) +
+  facet_grid(Variable ~ .) + 
+  ggtitle("Usage of FitBit functions") +
+  xlab("Days Used") + 
+  ylab("Count") +
+  theme(legend.position = "none")
+```
 
 ## Key Findings
 
