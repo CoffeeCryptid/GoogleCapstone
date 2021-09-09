@@ -7,32 +7,31 @@ output: html_document
 
 ## Business Task
 
-Identify trends in the usage of fitness trackers, and use these insights to help ajust the BellaBeat marketing strategy for their BellaBeat Leaf.
+Identify trends in the usage of fitness trackers, and use these insights to help adjust the BellaBeat marketing strategy for their BellaBeat Leaf.
 
 ## Data Sources
 
-The data is from the [FitBit Fitness Tracker Data](https://www.kaggle.com/arashnic/fitbit) on Kaggle. This collection of datasets includes personal tracker data from thirty FitBit users, including minute-level output for physical activity, heart rate, and sleep monitoring. The data was recorded in December 2016.
+The data is from the [FitBit Fitness Tracker Data](https://www.kaggle.com/arashnic/fitbit) on Kaggle. This collection of datasets includes personal tracker data from thirty FitBit users, including minute-level output for physical activity, heart rate, and sleep monitoring. The data was recorded over a course of 31 days in April/May 2016.
 
-Limitations:  
+The data has the following limitations:
 <ul>
-  <li>Data is not recent (collected in 2016)</li>
-  <li>Sample is relatively small (33 respondents)</li>
+  <li>The data is not recent (collected in 2016)</li>
+  <li>The sample is relatively small (33 respondents)</li>
   <li>Demographic data of respondents is not included. This is especially problematic since BellaBeat's main customer base is female, and it is unclear how many women are included in the sample, and how they might differ from men in their FitBit usage.</li>
 </ul>
+I will still use the data for analysis because of a lack of alternatives.
 
 ## Data Cleaning and Manipulation
 
-The data contains dates and time as strings. These need to be converted into appropriate formats for analysis.  
-Identify and remove Duplicate data  
-Merge datasets  
+The data contains dates and time as strings. These need to be converted into appropriate formats for analysis. Furthermore, duplicate data needs to be identified and removed, and the datasets have to be merged before they can be analyzed.
 
-### Data Preparation Daily Data:
 ```{r, message = F, results = "asis"}
 library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(lubridate)
 library(scales)
+library(kableExtra)
 
 dailyActivity <- read.csv("FitBaseData/dailyActivity_merged.csv") %>%
   mutate(ActivityDate = as.Date(ActivityDate, "%m/%d/%Y"))
@@ -63,41 +62,15 @@ dailyData <- left_join(dailyActivity, dailySleep, by = c("Id", "ActivityDate")) 
 #rm(dailyActivity, dailySleep, dailyWeight)
 ```
 
-### Data Preparation Hourly Data
-
-```{r, message = F, results = "asis"}
-hourlyIntensity <- read.csv("FitBaseData/hourlyIntensities_merged.csv") 
-hourlyCalories <- read.csv("FitBaseData/hourlyCalories_merged.csv")
-hourlySteps <- read.csv("FitBaseData/hourlySteps_merged.csv")
-
-cat(sprintf("Number of duplicate rows:  
-* Intensity Log: %i  
-* Calories Log: %i  
-* Steps Log: %i",
-              sum(duplicated(hourlyIntensity)),
-              sum(duplicated(hourlyCalories)),
-              sum(duplicated(hourlySteps))))
-
-#Merge Data
-hourlyData <- full_join(hourlyIntensity, hourlyCalories, by = c("Id", "ActivityHour")) %>%
-  full_join(hourlySteps, by = c("Id", "ActivityHour")) %>%
-  mutate(ActivityHour = strptime(ActivityHour, "%m/%d/%Y %I:%M:%S %p"),
-         ActivityDate = as.Date(ActivityHour))
-
-#Clean up
-rm(hourlyCalories, hourlyIntensity, hourlySteps)
-
-cat(paste("Number of NA values:", sum(is.na(hourlyData))))
-```
-
 ## Analysis
 
 ### Which functions are used?
 
-Use daily data to analyze which functions are used  
-Actity data: on how many days for every respondent are steps recorded?  
-Sleep data: on how many days is sleep recorded?  
-Weight data: how many weight records exist for every person?
+First, I will use the daily data to analyze which functions are used.
+
+* Activity data: For every person, the number of days in which steps were recorded is counted. If no steps were recorded on a certain day, the activity tracking function is considered not used on that day.  
+* Sleep data: The number of days on which sleep was recorded is counted for every person.  
+* Weight data: The number of weight records is counted for every person.  
 
 ```{r}
 dailyUsage <- group_by(dailyData, Id) %>%
@@ -105,6 +78,14 @@ dailyUsage <- group_by(dailyData, Id) %>%
             Sleep = sum(!is.na(TotalMinutesAsleep)),
             Weight = sum(!is.na(WeightKg), na.rm = TRUE),
             SleepWeight = sum(!is.na(TotalMinutesAsleep) | !is.na(WeightKg)),
+            AvgSleep = mean(TotalMinutesAsleep/60, na.rm = TRUE),
+            SdSleep = sd(TotalMinutesAsleep/60, na.rm = TRUE),
+            BMI = mean(BMI, na.rm = TRUE),
+            AvgDailySteps = mean(TotalSteps, na.rm = TRUE),
+            VeryActiveMinutes = mean(VeryActiveMinutes, na.rm = TRUE),
+            FairlyActiveMinutes = mean(FairlyActiveMinutes, na.rm = TRUE),
+            LightlyActiveMinutes = mean(LightlyActiveMinutes, na.rm = TRUE),
+            SedentaryMinutes = mean(SedentaryMinutes, na.rm = TRUE),
             n = n())
 
 pivot_longer(dailyUsage, cols = Activity:Weight, 
@@ -118,6 +99,12 @@ pivot_longer(dailyUsage, cols = Activity:Weight,
   theme(legend.position = "none")
 ```
 
+In general, respondents used FitBit regularly. `r label_percent()((sum(dailyUsage$Activity >= 30))/nrow(dailyUsage))` of respondents used FitBit's activity tracking on at least 30 days. One respondent used FitBit on only three days, all other respondents used FitBit on at least 17 days out of 31.
+
+The other functions, sleep tracking and weight tracking, were used much less often. Only `r label_percent()((sum(dailyUsage$Sleep > 15))/nrow(dailyUsage))` of respondents used the sleep tracking function more than half of all days. `r label_percent()((sum(dailyUsage$Sleep == 0))/nrow(dailyUsage))` of respondents did not use the sleep tracking function at all.
+
+The weight tracking function was used even less. `r label_percent()((sum(dailyUsage$Weight == 0, na.rm = TRUE))/nrow(dailyUsage))` of respondents do not use the weight tracking function at all. Only two respondents use the function frequently, the other respondents record their weight infrequently. Of course, weight does not have to be recorded every day, since it is unlikely to fluctuate much in such a short time. However, the number of people who did not use the function at all is still remarkable.
+
 ```{r}
 mutate(dailyUsage, WeightGroup = case_when(Weight > 20 ~ 3, Weight > 0 ~ 2, TRUE ~ 1) %>% 
          ordered(levels = c(1:3), labels = c("never used", "used occasionally", "used frequently"))) %>%
@@ -126,12 +113,16 @@ mutate(dailyUsage, WeightGroup = case_when(Weight > 20 ~ 3, Weight > 0 ~ 2, TRUE
   scale_color_brewer(palette="RdYlGn")
 ```
 
+To sum up, most respondents use their FitBit regularly. They use the passive activity tracking function most often. The other functions, which require manual user inputs, were used significantly less. The majority of respondents do not use the weight tracking function at all.
+
 ### Grouping
 
-Group users into three groups:
-- Occasional users: use FitBit irregularly  
-- Frequent users: use FitBit frequently, but mainly use Activity tracking and don't make frequent use of sleep tracking or weight tracking  
-- Heavy users: use FitBit frequently for both activity tracking as well as sleep tracking or weight tracking
+Next, I have grouped users into three groups based on their usage data:
+<ul>
+<li><strong>Occasional</strong> users use FitBit irregularly </li>
+<li><strong>Frequent users</strong> use FitBit frequently, but mainly use Activity tracking and don't make frequent use of sleep tracking or weight tracking </li>
+<li><strong>Heavy users</strong> use FitBit frequently for both activity tracking as well as sleep tracking or weight tracking </li>
+</ul>
 
 ```{r}
 set.seed(10)
@@ -143,6 +134,27 @@ ggplot(dailyUsage, aes(x = Activity, y = SleepWeight, color = cluster)) +
   geom_point()
 ```
 
+### Group Characteristics
+
+The groups differ in their recorded activity. After excluding the days on which users did not use their FitBit, occasional users show a much lower average daily activity than the other groups. Although the number of sedentary minutes is roughly the same as that of the frequent users, they record only about half as many steps, and spend much less time being active.
+
+```{r, message = FALSE}
+group_by(dailyUsage, cluster) %>%
+  summarise(across(AvgDailySteps:SedentaryMinutes, ~mean(., na.rm = TRUE))) %>%
+  kbl(format = "html", digits = 1) %>%
+  kable_styling(full_width = TRUE, "hover")
+```
+
+The heavy users also differ from the frequent users. They spend about half an hour per day being very active, compared to twenty minutes for the frequent user group. They record more steps, and spend six hours less being sedentary.
+
 ## Key Findings
 
+Most respondents use their FitBit regularly. The passive activity tracking function is used the most frequently, while the sleep tracking and weight tracking functions are used much less. Most respondents do not use the weight tracking function at all.
+
+Respondents can roughly be categorized into three groups: The first group are the occasional users, who use their FitBit infrequently. Frequent users use their FitBit on most days, but they mostly use the passive activity tracking function, and do not record their weight or sleep often. The heavy users also use the activity tracking function frequently, and additionally also make frequent use of FitBit's other functions. The groups differ in their activity patterns, with the occasional users recording the lowest daily activity. The heavy users on the other hand spend much less minutes being sedentary, and spend more time being active.
+
 ## Recommendations
+
+It is recommended to focus on the activity tracking function in advertising, as it is the function that FitBit users use most often. The weight tracking function on the other hand seems to be the least popular, so advertising should not emphasize it too much. Regular FitBit usage seems to be associated with higher physical activity, so it is recommended to stress the potential benefits of the BellaBeat Leaf in staying active.
+
+However, this analysis has several limitations. The sample size is small, the data is not recent, and demographic data of the FitBit users is unknown. The last point especially is a problem, since BellaBeat's target demographic are women, and the gender of the FitBit users is unknown. It is possible that men and women significantly differ in their FitBit usage patterns.
